@@ -3,76 +3,48 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import morgan from "morgan";
-import session from "express-session";
-import cookieParser from "cookie-parser";
-import multer from "multer";
-import fs from "fs";
+import nunjucks from "nunjucks";
+import connect from "./schemas/index.js";
 
 import indexRouter from "./routes/index.js";
-import userRouter from "./routes/user.js";
-import connect from "./schemas/index.js";
+import usersRouter from "./routes/users.js";
+import commentsRouter from "./routes/comments.js";
 
 dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-try {
-  fs.readdirSync("uploads");
-} catch (error) {
-  console.error("Create directory because it don't exist 'uploads'");
-  fs.mkdirSync("uploads");
-}
-
-// const upload = multer({
-//   storage: multer.diskStorage({
-//     destination(req, file, done) {
-//       done(null, "uploads/");
-//     },
-//     filename(req, file, done) {
-//       const ext = path.extname(file.originalname);
-//       done(null, path.basename(file.originalname, ext) + Date.now() + ext);
-//     },
-//   }),
-//   limits: { fileSize: 5 * 1024 * 1024 },
-// });
-
 const app = express();
-app.set("port", process.env.PORT || 3000);
-app.set("views", path.join(__dirname, "views"));
-app.set("view engine", "pug");
+app.set("port", process.env.PORT || 3002);
+app.set("view engine", "html");
+nunjucks.configure(__dirname + "/views", {
+  express: app,
+  watch: true,
+});
 connect();
 
 app.use(morgan("dev"));
-// app.use("/", express.static(path.join("public")));
-// app.use("/", express.static(path.join(__dirname, "views")));
+app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser(process.env.COOKIE_SECRET));
-app.use(
-  session({
-    resave: false,
-    saveUninitialized: false,
-    secret: process.env.COOKIE_SECRET,
-    cookie: {
-      httpOnly: true,
-      secure: false,
-    },
-    name: "session-cookie",
-  })
-);
 
 app.use("/", indexRouter);
-app.use("/user", userRouter);
+app.use("/users", usersRouter);
+app.use("/comments", commentsRouter);
 
 app.use((req, res, next) => {
-  res.status(404).send("Not Found");
+  const error = new Error(`${req.method} ${req.url} 라우터가 없습니다.`);
+  error.status = 404;
+  next(error);
 });
 
 app.use((err, req, res, next) => {
-  console.log(err);
-  res.status(500).send(err.message);
+  res.locals.message = err.message;
+  res.locals.error = process.env.NODE_ENV !== "production" ? err : {};
+  res.status(err.status || 500);
+  res.render("error");
 });
 
 app.listen(app.get("port"), () => {
-  console.log(app.get("port"), "번 포트 대기 중");
+  console.log(app.get("port"), "번 포트에서 대기 중");
 });
